@@ -1,0 +1,14 @@
+node_modules
+dist
+.git
+.gitignore
+.eslintcache
+*.tsbuildinfo
+*.log
+coverage
+.vitest-cache
+test
+.DS_Store
+.vscode
+.github
+docker-compose.yml

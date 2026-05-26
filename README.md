@@ -41,12 +41,42 @@ Adicione no `mcpServers` do seu cliente:
 
 Após salvar, o cliente lista todas as ferramentas (~40) prefixadas com `camunda7`.
 
+### Streamable HTTP (remoto / Docker)
+
+Inicie o servidor HTTP:
+
+```bash
+npm run start:http
+# @fssou/camunda-mcp v0.1.0 ready on http://0.0.0.0:3000/mcp
+```
+
+Variáveis de ambiente:
+
+| Variável | Padrão | Descrição |
+|---|---|---|
+| `MCP_HTTP_PORT` | `3000` | Porta de escuta |
+| `MCP_HTTP_HOST` | `0.0.0.0` | Endereço de bind |
+
+No cliente MCP, configure a URL:
+
+```json
+{
+  "mcpServers": {
+    "camunda7": {
+      "url": "http://localhost:3000/mcp"
+    }
+  }
+}
+```
+
+O transporte Streamable HTTP cria uma sessão isolada (DiagramStore próprio) por
+cliente, identificada pelo header `mcp-session-id`.
+
 ### Execução standalone (debug)
 
 ```bash
-node dist/index.js
-# imprime no stderr: "@fssou/camunda-mcp v0.1.0 ready on stdio"
-# espera mensagens MCP JSON-RPC em stdin
+node dist/index.js          # stdio
+node dist/http.js           # HTTP na porta 3000
 ```
 
 ---
@@ -166,6 +196,32 @@ Use `auto_layout` para regenerar `bpmndi:BPMNDiagram` quando o diagrama mudar.
 
 ---
 
+## Docker
+
+### Build local
+
+```bash
+docker build -t camunda-mcp .
+docker run -p 3000:3000 camunda-mcp
+```
+
+Ou via Docker Compose:
+
+```bash
+docker compose up
+```
+
+### Docker Hub
+
+```bash
+docker pull fssou/camunda-mcp
+docker run -p 3000:3000 fssou/camunda-mcp
+```
+
+O container expõe o MCP server em `http://localhost:3000/mcp` via Streamable HTTP.
+
+---
+
 ## Desenvolvimento
 
 ```bash
@@ -175,6 +231,7 @@ npm run typecheck     # tsc --noEmit
 npm run lint          # eslint
 npm test              # vitest (smoke end-to-end)
 npm run dev           # roda src/index.ts via tsx (stdio)
+npm run dev:http      # roda src/http.ts via tsx (HTTP na porta 3000)
 ```
 
 A árvore do projeto:
@@ -182,6 +239,7 @@ A árvore do projeto:
 ```
 src/
 ├── index.ts              # stdio entrypoint
+├── http.ts               # HTTP entrypoint (Streamable HTTP)
 ├── server.ts             # buildServer() — factory de McpServer
 ├── store.ts              # DiagramStore + DiagramSession
 ├── bpmn/
