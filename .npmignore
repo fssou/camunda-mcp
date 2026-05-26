@@ -1,0 +1,11 @@
+src
+test
+tsconfig.json
+.eslintrc.cjs
+eslint.config.js
+.github
+.vscode
+node_modules
+*.log
+*.tsbuildinfo
+coverage
