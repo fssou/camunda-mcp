@@ -213,7 +213,7 @@ export class Handlers {
         const summary = describeElement(el);
         const ext = (el as any).extensionElements as ModdleElement | undefined;
         if (ext) {
-          summary.extensionElements = ((ext as any).values ?? []).map((v: ModdleElement) => ({ type: (v as any).$type, ...stringifyShallow(v) }));
+          summary.extensionElements = ((ext as any).values ?? []).map((v: ModdleElement) => moddleToJson(v));
         }
         // Surface Camunda extension attributes (from the camunda moddle package).
         const CAMUNDA_ATTRS = [
@@ -322,8 +322,18 @@ export class Handlers {
       }
       case 'set_io_mapping': {
         const b = this.builder(p.diagramId);
-        setIoMapping(b, b.getElement(p.elementId), { replace: p.replace, inputs: p.inputs, outputs: p.outputs }, this.store.getModdle());
-        return ok({ elementId: p.elementId });
+        const el = b.getElement(p.elementId);
+        const io = setIoMapping(
+          b,
+          el,
+          { mode: p.mode, replace: p.replace, inputs: p.inputs, outputs: p.outputs },
+          this.store.getModdle(),
+        );
+        return ok({
+          elementId: p.elementId,
+          mode: p.mode ?? 'replace',
+          inputOutput: moddleToJson(io),
+        });
       }
       case 'set_camunda_properties': {
         const b = this.builder(p.diagramId);
@@ -384,19 +394,30 @@ export class Handlers {
   }
 }
 
-function stringifyShallow(v: ModdleElement): Record<string, unknown> {
+/**
+ * Recursively renders a moddle element into a plain JSON object so callers
+ * can inspect Camunda extension contents (parameters, properties, listeners,
+ * form fields, scripts) without parsing the XML themselves.
+ *
+ * `depth` guards against runaway recursion through the bidirectional
+ * `$parent` link or future cyclic structures.
+ */
+function moddleToJson(v: unknown, depth = 4): unknown {
+  if (v === null || v === undefined) return v;
+  if (typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map((item) => moddleToJson(item, depth));
+  if (depth <= 0) {
+    const id = (v as any).id;
+    const type = (v as any).$type;
+    return type ? { $type: type, ...(id ? { id } : {}) } : '[…]';
+  }
   const out: Record<string, unknown> = {};
+  if ((v as any).$type) out.$type = (v as any).$type;
   for (const key of Object.keys(v as any)) {
     if (key.startsWith('$')) continue;
     const value = (v as any)[key];
-    if (value === null || value === undefined) continue;
-    if (typeof value === 'object' && (value as any).$type) {
-      out[key] = { $type: (value as any).$type, id: (value as any).id };
-    } else if (Array.isArray(value)) {
-      out[key] = value.map((item: any) => (item && item.$type ? { $type: item.$type, id: item.id } : item));
-    } else {
-      out[key] = value;
-    }
+    if (value === undefined) continue;
+    out[key] = moddleToJson(value, depth - 1);
   }
   return out;
 }

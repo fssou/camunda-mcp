@@ -258,18 +258,21 @@ export const setFormSchema = z.object({
 
 export const setIoMappingSchema = z.object({
   diagramId: z.string().describe('Diagram session id'),
-  elementId: z.string().describe('Element id'),
-  replace: z.boolean().optional().describe('Replace existing camunda:InputOutput (default false)'),
+  elementId: z.string().describe('Activity / event / gateway id to receive camunda:InputOutput'),
+  mode: z.enum(['replace', 'merge', 'append']).optional().describe(
+    'How to combine with existing parameters. `replace` (default) discards the existing camunda:InputOutput and writes fresh inputs/outputs. `merge` keeps any existing parameters whose `name` is NOT in the new list and overwrites those that ARE. `append` keeps all existing parameters and adds the new ones (duplicates allowed). For backward compatibility, the legacy `replace` boolean is still honored when `mode` is absent.',
+  ),
+  replace: z.boolean().optional().describe('Deprecated. Same as mode="replace". Kept for backward compatibility.'),
   inputs: z.array(z.object({
-    name: z.string(),
-    value: z.string().optional(),
-    script: z.object({ scriptFormat: z.string(), value: z.string() }).optional(),
-  })).optional(),
+    name: z.string().describe('camunda:InputParameter name'),
+    value: z.string().optional().describe('Literal/expression body of the parameter (e.g. ${orderId})'),
+    script: z.object({ scriptFormat: z.string(), value: z.string() }).optional().describe('camunda:Script body (mutually exclusive with value)'),
+  })).optional().describe('camunda:InputParameter list. Pass an empty array to remove all inputs (with mode=replace).'),
   outputs: z.array(z.object({
-    name: z.string(),
+    name: z.string().describe('camunda:OutputParameter name'),
     value: z.string().optional(),
     script: z.object({ scriptFormat: z.string(), value: z.string() }).optional(),
-  })).optional(),
+  })).optional().describe('camunda:OutputParameter list. Pass an empty array to remove all outputs (with mode=replace).'),
 });
 
 export const setCamundaPropertiesSchema = z.object({

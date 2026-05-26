@@ -134,28 +134,68 @@ export interface CamundaParameter {
   script?: { scriptFormat: string; value: string };
 }
 
+export type IoMappingMode = 'replace' | 'merge' | 'append';
+
 export interface IoMappingOptions {
-  /** When true, clear any existing camunda:InputOutput before applying. */
+  /**
+   * `replace` (default) discards the existing camunda:InputOutput and writes
+   * fresh inputs/outputs. `merge` overwrites parameters with the same `name`
+   * and keeps the rest. `append` keeps everything and pushes the new
+   * parameters at the end.
+   */
+  mode?: IoMappingMode;
+  /** Deprecated alias for `mode: 'replace'`. */
   replace?: boolean;
   inputs?: CamundaParameter[];
   outputs?: CamundaParameter[];
 }
 
 function buildParam(moddle: BpmnModdleInstance, kind: 'camunda:InputParameter' | 'camunda:OutputParameter', p: CamundaParameter): ModdleElement {
-  const param = moddle.create(kind, { name: p.name });
+  const props: Record<string, unknown> = { name: p.name };
+  if (p.script === undefined && p.value !== undefined) {
+    // Body content has to be supplied at construction time; assigning to
+    // `.value` afterwards works on most moddle versions but is brittle.
+    props.value = p.value;
+  }
+  const param = moddle.create(kind, props);
   if (p.script) {
     const script = moddle.create('camunda:Script', { scriptFormat: p.script.scriptFormat, value: p.script.value });
     (param as any).definition = script;
-  } else if (p.value !== undefined) {
-    (param as any).value = p.value;
+    (script as any).$parent = param;
   }
   return param;
 }
 
-export function setIoMapping(builder: BpmnBuilder, el: ModdleElement, opts: IoMappingOptions, moddle: BpmnModdleInstance): void {
+function mergeByName(existing: ModdleElement[], incoming: ModdleElement[]): ModdleElement[] {
+  const incomingByName = new Map<string, ModdleElement>();
+  for (const p of incoming) incomingByName.set((p as any).name, p);
+  const merged: ModdleElement[] = [];
+  for (const p of existing) {
+    const replacement = incomingByName.get((p as any).name);
+    if (replacement) {
+      merged.push(replacement);
+      incomingByName.delete((p as any).name);
+    } else {
+      merged.push(p);
+    }
+  }
+  for (const p of incomingByName.values()) merged.push(p);
+  return merged;
+}
+
+function reparent(parent: ModdleElement, children: ModdleElement[]): ModdleElement[] {
+  for (const c of children) (c as any).$parent = parent;
+  return children;
+}
+
+export function setIoMapping(builder: BpmnBuilder, el: ModdleElement, opts: IoMappingOptions, moddle: BpmnModdleInstance): ModdleElement {
+  // Both legacy `replace` and the new `mode` flag resolve to one of three
+  // modes; the default has always been to replace the InputOutput as a whole.
+  const mode: IoMappingMode = opts.mode ?? 'replace';
   const ext = builder.ensureExtensionElements(el);
   let io = ((ext as any).values as ModdleElement[]).find((v) => v.$type === 'camunda:InputOutput');
-  if (opts.replace && io) {
+
+  if (mode === 'replace' && io) {
     (ext as any).values = ((ext as any).values as ModdleElement[]).filter((v) => v !== io);
     io = undefined;
   }
@@ -164,12 +204,37 @@ export function setIoMapping(builder: BpmnBuilder, el: ModdleElement, opts: IoMa
     (io as any).$parent = ext;
     ((ext as any).values as ModdleElement[]).push(io);
   }
-  if (opts.inputs) {
-    (io as any).inputParameters = opts.inputs.map((p) => buildParam(moddle, 'camunda:InputParameter', p));
+
+  const newInputs = (opts.inputs ?? []).map((p) => buildParam(moddle, 'camunda:InputParameter', p));
+  const newOutputs = (opts.outputs ?? []).map((p) => buildParam(moddle, 'camunda:OutputParameter', p));
+  const existingInputs = ((io as any).inputParameters ?? []) as ModdleElement[];
+  const existingOutputs = ((io as any).outputParameters ?? []) as ModdleElement[];
+
+  if (opts.inputs !== undefined) {
+    if (mode === 'append') {
+      (io as any).inputParameters = reparent(io, [...existingInputs, ...newInputs]);
+    } else if (mode === 'merge') {
+      (io as any).inputParameters = reparent(io, mergeByName(existingInputs, newInputs));
+    } else {
+      (io as any).inputParameters = reparent(io, newInputs);
+    }
+  } else if (mode === 'replace') {
+    (io as any).inputParameters = [];
   }
-  if (opts.outputs) {
-    (io as any).outputParameters = opts.outputs.map((p) => buildParam(moddle, 'camunda:OutputParameter', p));
+
+  if (opts.outputs !== undefined) {
+    if (mode === 'append') {
+      (io as any).outputParameters = reparent(io, [...existingOutputs, ...newOutputs]);
+    } else if (mode === 'merge') {
+      (io as any).outputParameters = reparent(io, mergeByName(existingOutputs, newOutputs));
+    } else {
+      (io as any).outputParameters = reparent(io, newOutputs);
+    }
+  } else if (mode === 'replace') {
+    (io as any).outputParameters = [];
   }
+
+  return io;
 }
 
 export interface CamundaPropertyEntry {
