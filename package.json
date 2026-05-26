@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "camunda-mcp": "bin/camunda-mcp.js"
+    "camunda-mcp": "bin/camunda-mcp.js",
+    "camunda-mcp-http": "bin/camunda-mcp-http.js"
   },
   "files": [
     "dist",
@@ -18,7 +19,9 @@
     "build": "tsc -p tsconfig.json",
     "clean": "rm -rf dist",
     "start": "node dist/index.js",
+    "start:http": "node dist/http.js",
     "dev": "tsx src/index.ts",
+    "dev:http": "tsx src/http.ts",
     "lint": "eslint \"src/**/*.ts\" \"test/**/*.ts\"",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
